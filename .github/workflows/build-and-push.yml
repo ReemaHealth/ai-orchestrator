@@ -1,0 +1,50 @@
+# Build the orchestrator image and push it to the shared reema Artifact Registry.
+# Keyless auth via Workload Identity Federation — no service-account key in CI
+# (DEVOPS-188). Deploy is NOT done here: the ai_orchestrator_dev Cloud Run service
+# and its image tag are managed by Terraform/Atlantis (DEVOPS-320).
+#
+# Requires the WIF foundation from idp PR #301 (DEVOPS-188): the github-actions
+# pool/provider and the push-only ai-orchestrator-ci service account, whose
+# impersonation binding is pinned to refs/heads/main of this repo.
+name: build-and-push
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required to mint the GitHub OIDC token for WIF
+
+env:
+  AR_IMAGE: us-central1-docker.pkg.dev/orchestration-platform/reema/ai-orchestrator
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Keyless: federate the GitHub OIDC token to GCP and impersonate the
+      # push-only CI service account. Do not set a custom `audience` — the WIF
+      # provider relies on auth@v2's default audience.
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1013461400632/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: ai-orchestrator-ci@orchestration-platform.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.AR_IMAGE }}:dev
+            ${{ env.AR_IMAGE }}:${{ github.sha }}
