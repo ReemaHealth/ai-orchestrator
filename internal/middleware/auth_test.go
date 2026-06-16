@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 
 	"ai-orchestration/internal/auth"
-	"ai-orchestration/internal/handlers"
 	"ai-orchestration/internal/middleware"
 )
 
@@ -29,7 +28,9 @@ func (s stubFirebaseVerifier) VerifyToken(_ *http.Request, _ string) (auth.Princ
 }
 
 func TestFirebaseAuthStatuses(t *testing.T) {
-	okHandler := http.HandlerFunc(handlers.Prompt)
+	okHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	tests := []struct {
 		name       string
@@ -84,7 +85,9 @@ func TestSlackAuthStatuses(t *testing.T) {
 	timestamp := strconv.FormatInt(ts, 10)
 	signature := auth.SignSlackRequest(timestamp, body, secret)
 
-	handler := middleware.SlackAuth(secret)(http.HandlerFunc(handlers.SlackEvents))
+	handler := middleware.SlackAuth(secret)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
 
 	t.Run("missing headers", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/slack/events", bytes.NewReader(body))

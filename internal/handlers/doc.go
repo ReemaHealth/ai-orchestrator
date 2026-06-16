@@ -1,5 +1,5 @@
 // Package handlers contains HTTP handlers for ai-orchestrator.
 //
-// Endpoint behavior is documented in docs/endpoints.md. Auth-gated routes currently
-// return a stub 200 JSON response after cryptographic verification passes.
+// See docs/endpoints.md for route behavior. POST /api/v1/prompt streams SSE;
+// POST /api/v1/slack/events handles Slack URL verification and event callbacks.
 package handlers

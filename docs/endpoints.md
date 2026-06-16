@@ -13,7 +13,8 @@ HTTP status contract for protected routes:
 
 - **401** — no auth attempt (missing credentials)
 - **403** — credentials present but cryptographic verification failed
-- **200** — verification passed
+- **400** — auth passed but request body JSON is invalid (handlers only)
+- **200** — success (SSE stream or JSON ack/challenge)
 
 Never trust `reemaUserId`, email, or user ids from request body or custom headers.
 
@@ -36,11 +37,16 @@ GCP liveness probe. No authentication.
 
 Web app prompt endpoint. Firebase JWT required.
 
-### Request (now)
+### Request
 
 ```
 Authorization: Bearer <firebase-id-token>
+Content-Type: application/json
+
+{"prompt":"optional user message"}
 ```
+
+The `prompt` field is optional for now; the skeleton stream does not yet call the ADK agent.
 
 JWT must be issued by the configured Identity Platform project (`FIREBASE_PROJECT_ID`) with:
 
@@ -49,11 +55,7 @@ JWT must be issued by the configured Identity Platform project (`FIREBASE_PROJEC
 - `firebase.sign_in_provider` = `google.com` (or `FIREBASE_SIGN_IN_PROVIDER`)
 - `reemaUserId` custom claim (UUID)
 
-### Response (now)
-
-Auth passes → `200` `{"status":"ok"}`
-
-### Response (future)
+### Response
 
 Auth passes → SSE stream:
 
@@ -62,18 +64,18 @@ Content-Type: text/event-stream
 Cache-Control: no-cache
 Connection: keep-alive
 
-data: <agent token chunk>
+event: meta
+data: {"reemaUserId":"<verified-uuid>"}
 
+data: Skeleton token chunk 1
+
+data: Skeleton token chunk 2
 ...
 ```
 
-Skeleton implementation preserved in `handlers.PromptSSEFuture`:
-
-- Streams 5 placeholder chunks (`Skeleton token chunk N`)
-- Flushes after each chunk with 500ms delay
-- Uses verified `reemaUserId` from auth context for agent attribution (when wired)
-
-Reference: original `sseHandler` in the project skeleton.
+- First event carries verified `reemaUserId` from the JWT (for client attribution / debugging)
+- Five placeholder chunks follow, flushed every 500ms
+- **Future:** replace skeleton chunks with real ADK/VDS agent token stream keyed off `reemaUserId` and `prompt`
 
 ---
 
@@ -81,29 +83,28 @@ Reference: original `sseHandler` in the project skeleton.
 
 Slack Events API webhook. Slack HMAC required.
 
-### Request (now)
+### Request
 
 ```
 X-Slack-Signature: v0=<hmac>
 X-Slack-Request-Timestamp: <unix>
+Content-Type: application/json
 ```
 
-Body is the raw Slack JSON payload. Signature is verified before the handler runs.
+Body is the raw Slack JSON payload. Signature is verified before the handler runs; the verified body is passed to the handler via request context.
 
-### Response (now)
+### Response
 
-Auth passes → `200` `{"status":"ok"}`
+| Payload `type` | Response | Notes |
+|----------------|----------|-------|
+| `url_verification` | `200` `{"challenge":"<challenge>"}` | Slack app install handshake |
+| `event_callback` | `200` `{"status":"accepted"}` | Ack within ~3s; event processed in background |
+| other | `200` `{"status":"accepted"}` | Safe default ack |
 
-### Response (future)
+Background processing (`processSlackEvent`) currently logs the event. **Future:**
 
-1. **URL verification** — when `type` is `url_verification`, return `{"challenge":"<challenge>"}` after signature verify
-2. **Events** — immediately ack within Slack's ~3s window: `200` `{"status":"accepted"}`
-3. **Background processing** — spawn worker to invoke ADK agent with parsed event
-4. **User mapping** — map `event.user` + `team_id` → `reemaUserId` before agent calls (separate from crypto verify)
-
-Skeleton implementation preserved in `handlers.SlackEventsFuture`.
-
-Reference: original `slackHandler` in the project skeleton.
+- Map `event.user` + `team_id` → `reemaUserId`
+- Invoke ADK agent asynchronously
 
 ---
 

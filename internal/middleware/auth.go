@@ -76,7 +76,7 @@ func SlackAuth(signingSecret string) func(http.Handler) http.Handler {
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(auth.WithSlackBody(r.Context(), body)))
 		})
 	}
 }

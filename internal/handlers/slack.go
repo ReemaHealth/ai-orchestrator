@@ -1,6 +1,26 @@
 package handlers
 
-import "net/http"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"log"
+	"net/http"
+
+	"ai-orchestration/internal/auth"
+)
+
+const (
+	slackTypeURLVerification = "url_verification"
+	slackTypeEventCallback   = "event_callback"
+)
+
+type slackPayload struct {
+	Type      string          `json:"type"`
+	Challenge string          `json:"challenge"`
+	TeamID    string          `json:"team_id"`
+	Event     json.RawMessage `json:"event"`
+}
 
 func SlackEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -8,16 +28,46 @@ func SlackEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{"status":"ok"}`))
+	body, ok := auth.SlackBodyFromContext(r.Context())
+	if !ok {
+		http.Error(w, "missing payload", http.StatusInternalServerError)
+		return
+	}
+
+	var payload slackPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	switch payload.Type {
+	case slackTypeURLVerification:
+		writeJSON(w, http.StatusOK, map[string]string{"challenge": payload.Challenge})
+		return
+	case slackTypeEventCallback:
+		writeJSON(w, http.StatusOK, map[string]string{"status": "accepted"})
+		go processSlackEvent(bytes.Clone(body))
+		return
+	default:
+		writeJSON(w, http.StatusOK, map[string]string{"status": "accepted"})
+	}
 }
 
-// SlackEventsFuture acknowledges Slack immediately and processes events in the background.
-// See docs/endpoints.md for the intended production behavior.
-func SlackEventsFuture(w http.ResponseWriter, _ *http.Request) {
+func processSlackEvent(body []byte) {
+	var payload slackPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		log.Printf("slack event: parse payload: %v", err)
+		return
+	}
+
+	// TODO: map event user + team_id to reemaUserId, then invoke ADK agent.
+	ctx := context.Background()
+	_ = ctx
+	log.Printf("slack event: team_id=%s type=%s (agent dispatch not wired)", payload.TeamID, payload.Type)
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{"status":"accepted"}`))
-	// TODO: Spin out a background worker context here to call the ADK agent asynchronously.
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
