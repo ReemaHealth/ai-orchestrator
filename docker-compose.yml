@@ -1,0 +1,8 @@
+services:
+  orchestrator:
+    build: .
+    image: orchestrator-local
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
