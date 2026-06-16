@@ -11,11 +11,11 @@ import (
 func WriteAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, auth.ErrNoCredentials):
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	case errors.Is(err, auth.ErrVerificationFailed):
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Forbidden", http.StatusForbidden)
 	default:
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Forbidden", http.StatusForbidden)
 	}
 }
 
