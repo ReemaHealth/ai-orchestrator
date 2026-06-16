@@ -1,0 +1,80 @@
+---
+description: Require thorough documentation for all new and changed code
+alwaysApply: true
+---
+
+# Documentation standards
+
+All code added or changed in this repo must be thoroughly documented before the task is complete.
+
+## Go source (`**/*.go`)
+
+### Packages
+
+Every package needs a `doc.go` or a package comment on the first file describing purpose and pointing to relevant `docs/` files when applicable.
+
+```go
+// Package auth provides cryptographic identity verification for Firebase JWT
+// and Slack request signing. See docs/architecture.md.
+package auth
+```
+
+### Exported symbols
+
+Document every exported type, func, const, and var with Go doc comments:
+
+- **What** it does (one sentence)
+- **Why** if non-obvious (security, protocol, business rule)
+- **Inputs/outputs** for functions with non-trivial contracts
+- **Errors** returned and when
+
+```go
+// VerifySlackRequest validates a Slack Events API request per Slack's signing
+// protocol. Returns ErrNoCredentials if headers are missing, ErrVerificationFailed
+// if the signature, timestamp, or replay window check fails.
+func VerifySlackRequest(...) error
+```
+
+### Unexported code
+
+Add comments for non-obvious logic: crypto steps, protocol quirks, security constraints, goroutine/async behavior, and TODOs with context.
+
+Do not add noise comments that restate the code (`// increment i`).
+
+### Handlers and middleware
+
+HTTP handlers must document route, auth requirements, request/response shape, and status codes in the function doc comment.
+
+## Tests (`**/*_test.go`)
+
+- Name tests `Test<Thing><Scenario>` with clear scenario names in subtests
+- Add a one-line comment when the test purpose is not obvious from the name
+- New packages or behaviors → add or update `docs/testing.md`
+
+## Project docs (`docs/`)
+
+When adding or changing behavior, update the relevant doc:
+
+| Change | Update |
+|--------|--------|
+| New/changed routes | `docs/endpoints.md` |
+| New packages, flows, auth | `docs/architecture.md` |
+| New tests or manual test steps | `docs/testing.md` |
+| Setup, env, quick start | `README.md` |
+
+## Security-sensitive code
+
+Document trust boundaries explicitly:
+
+- What identity is cryptographically verified
+- What must never be trusted from headers/body
+- HTTP status mapping for auth failures
+
+## Definition of done
+
+A change is not complete until:
+
+1. Exported API has Go doc comments
+2. Non-obvious logic is explained in code or docs
+3. `docs/` and `README.md` reflect user-facing changes
+4. `go test ./...` passes
