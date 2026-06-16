@@ -1,6 +1,6 @@
 # Endpoints
 
-This document describes HTTP endpoints for ai-orchestrator: current auth-gated behavior and intended future behavior.
+HTTP API reference for ai-orchestrator. See also [architecture.md](architecture.md) and [testing.md](testing.md).
 
 ## Authentication overview
 

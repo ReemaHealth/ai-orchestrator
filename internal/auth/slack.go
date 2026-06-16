@@ -13,6 +13,7 @@ import (
 
 const slackMaxRequestAge = 5 * time.Minute
 
+// VerifySlackRequest validates a Slack Events API request per Slack's signing protocol.
 func VerifySlackRequest(timestamp, signature string, body []byte, signingSecret string) error {
 	if strings.TrimSpace(timestamp) == "" || strings.TrimSpace(signature) == "" {
 		return ErrNoCredentials

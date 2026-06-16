@@ -2,6 +2,7 @@ package handlers
 
 import "net/http"
 
+// Healthz handles GET /healthz for GCP liveness probes. No authentication.
 func Healthz(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)

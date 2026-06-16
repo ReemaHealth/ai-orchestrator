@@ -1,5 +1,7 @@
 package main
 
+// ai-orchestrator: HTTP API for Lasso with Firebase and Slack cryptographic auth.
+// See README.md and docs/ for architecture, endpoints, and testing guides.
 import (
 	"context"
 	"fmt"

@@ -1,5 +1,6 @@
 package server
 
+// Package server registers HTTP routes and composes auth middleware with handlers.
 import (
 	"fmt"
 	"net/http"

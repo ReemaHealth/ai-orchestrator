@@ -15,10 +15,8 @@ import (
 
 const promptChunkDelay = 500 * time.Millisecond
 
-type promptRequest struct {
-	Prompt string `json:"prompt"`
-}
-
+// Prompt handles POST /api/v1/prompt. Requires auth.Principal on context (set by FirebaseAuth).
+// Streams SSE: meta event with reemaUserId, then skeleton agent chunks.
 func Prompt(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -40,6 +38,10 @@ func Prompt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	streamPrompt(w, principal.ReemaUserID, req.Prompt, promptChunkDelay)
+}
+
+type promptRequest struct {
+	Prompt string `json:"prompt"`
 }
 
 // StreamPromptForTest exposes streamPrompt for tests with a configurable chunk delay.

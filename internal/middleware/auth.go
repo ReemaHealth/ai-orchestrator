@@ -1,5 +1,7 @@
 package middleware
 
+// Package middleware provides HTTP middleware that wraps internal/auth verification
+// and maps auth errors to 401/403 responses.
 import (
 	"errors"
 	"io"

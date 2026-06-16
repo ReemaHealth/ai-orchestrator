@@ -22,6 +22,8 @@ type slackPayload struct {
 	Event     json.RawMessage `json:"event"`
 }
 
+// SlackEvents handles POST /api/v1/slack/events. Requires verified body on context (set by SlackAuth).
+// Dispatches by payload type: url_verification challenge echo, event_callback async ack.
 func SlackEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)

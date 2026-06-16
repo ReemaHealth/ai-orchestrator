@@ -1,5 +1,8 @@
 package auth
 
+// Package auth provides cryptographic identity verification for two caller types:
+// Firebase JWT (web app) and Slack request signing (Events API). Verified identity
+// is attached to context.Context for handlers. See docs/architecture.md.
 import (
 	"context"
 	"fmt"
