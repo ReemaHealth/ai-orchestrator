@@ -67,6 +67,9 @@ func TestFirebaseVerifierVerifyToken(t *testing.T) {
 	if principal.ReemaUserID != reemaUserID {
 		t.Fatalf("expected reema user id %s, got %s", reemaUserID, principal.ReemaUserID)
 	}
+	if principal.Email != "user@example.com" {
+		t.Fatalf("expected email user@example.com, got %s", principal.Email)
+	}
 }
 
 func TestExtractBearerToken(t *testing.T) {
@@ -94,6 +97,7 @@ func signTestFirebaseToken(t *testing.T, privateKey *rsa.PrivateKey, projectID s
 		"iss": "https://securetoken.google.com/" + projectID,
 		"aud": projectID,
 		"exp": time.Now().Add(time.Hour).Unix(),
+		"email": "user@example.com",
 		"firebase": map[string]any{
 			"sign_in_provider": "google.com",
 		},
