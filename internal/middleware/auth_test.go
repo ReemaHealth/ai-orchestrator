@@ -54,7 +54,10 @@ func TestFirebaseAuthStatuses(t *testing.T) {
 			name:   "valid token",
 			header: "Bearer good.token",
 			verifier: stubFirebaseVerifier{
-				principal: auth.Principal{ReemaUserID: uuid.New()},
+				principal: auth.Principal{
+					ReemaUserID: uuid.New(),
+					Email:       "user@example.com",
+				},
 			},
 			wantStatus: http.StatusOK,
 		},

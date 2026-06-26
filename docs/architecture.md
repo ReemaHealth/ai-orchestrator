@@ -39,11 +39,27 @@ flowchart TD
 
 ### Web app — `POST /api/v1/prompt`
 
-1. Client sends `Authorization: Bearer <firebase-id-token>` and optional `{"prompt":"..."}`.
+1. Client sends `Authorization: Bearer <firebase-id-token>` and `{"prompt":"..."}`.
 2. `FirebaseAuth` middleware calls `auth.ExtractBearerToken` then `FirebaseVerifier.VerifyToken`.
-3. On success, `auth.Principal{ReemaUserID}` is stored on `r.Context()`.
-4. `handlers.Prompt` reads the principal, optionally decodes the prompt body, opens an SSE stream.
-5. Stream emits a `meta` event with `reemaUserId`, then five skeleton token chunks (500ms apart).
+3. On success, `auth.Principal{ReemaUserID, Email}` is stored on `r.Context()`.
+4. `PromptHandler` requires non-empty `prompt` (400 otherwise).
+5. Opens SSE stream: `meta` event with `reemaUserId`, then agent chunks.
+6. `agent.Client.StreamQuery` calls Vertex Reasoning Engine `:streamQuery` via ADC when `AGENT_ENABLED=true`, or `SkeletonClient` locally when false.
+7. Verified `email` is sent as Agent Engine `user_id`; `reemaUserId` is included in agent input metadata.
+
+```mermaid
+sequenceDiagram
+    participant Client as WebApp
+    participant Orch as ai-orchestrator
+    participant Vertex as AgentEngine
+
+    Client->>Orch: Bearer JWT + prompt
+    Orch->>Orch: Verify JWT, extract reemaUserId + email
+    Orch->>Vertex: streamQuery via ADC
+    Note over Orch,Vertex: user_id = verified email
+    Vertex-->>Orch: streamed chunks
+    Orch-->>Client: SSE data events
+```
 
 ### Slack — `POST /api/v1/slack/events`
 
@@ -62,6 +78,7 @@ flowchart TD
 |----------------|
 | Load config from environment / `.env` |
 | Construct `FirebaseVerifier` (fetches Google JWKS at startup) |
+| Build `agent.Client` (Vertex or skeleton based on `AGENT_ENABLED`) |
 | Start `server.Server` on `cfg.Port` |
 | Block on SIGINT/SIGTERM |
 
@@ -72,7 +89,8 @@ flowchart TD
 | `config.go` | `Config`, `Load()` | Reads env vars; loads `.env` via godotenv (non-fatal if missing) |
 
 **Required env vars:** `FIREBASE_PROJECT_ID`, `SLACK_SIGNING_SECRET`  
-**Optional:** `PORT` (default `8080`), `FIREBASE_SIGN_IN_PROVIDER` (default `google.com`)
+**Optional:** `PORT` (default `8080`), `FIREBASE_SIGN_IN_PROVIDER` (default `google.com`)  
+**Vertex (when `AGENT_ENABLED=true`):** `GCP_PROJECT`, `GCP_LOCATION`, `REASONING_ENGINE_ID`, optional `AGENT_CLASS_METHOD` (default `stream_query`)
 
 `godotenv.Load()` does not override variables already set in the shell.
 
@@ -95,6 +113,7 @@ Cryptographic verification and request-scoped identity. No HTTP types in the cor
 4. Reject expired tokens (`exp`).
 5. Require `firebase.sign_in_provider` = configured provider (default `google.com`).
 6. Require `reemaUserId` claim as a valid UUID.
+7. Require `email` claim when sign-in provider is `google.com`.
 
 #### Slack verification (`VerifySlackRequest`)
 
@@ -118,12 +137,24 @@ Thin HTTP layer over `internal/auth`.
 
 `FirebaseVerifier` interface allows stubbing in middleware tests without live JWKS.
 
+### `internal/agent`
+
+Vertex AI Reasoning Engine client and local skeleton for development.
+
+| File | Key symbols | Purpose |
+|------|-------------|---------|
+| `client.go` | `Client`, `StreamQueryInput` | Interface for streaming agent output |
+| `vertex.go` | `VertexClient`, `NewVertexClient` | `:streamQuery` via ADC; parses streamed JSON chunks |
+| `skeleton.go` | `SkeletonClient`, `NewSkeletonClient` | Five placeholder chunks when `AGENT_ENABLED=false` |
+
+Orchestrator → Vertex auth uses **Application Default Credentials** (Cloud Run service account locally via `gcloud auth application-default login`). User identity for enterprise ACLs is passed as verified **email** in the agent input `user_id` field — not the raw Firebase JWT.
+
 ### `internal/handlers`
 
 | File | Handler | Purpose |
 |------|---------|---------|
 | `healthz.go` | `Healthz` | GCP liveness — `GET` only, `{"status":"healthy"}` |
-| `prompt.go` | `Prompt`, `StreamPromptForTest` | SSE prompt stream; test helper with configurable chunk delay |
+| `prompt.go` | `PromptHandler`, `NewPromptHandler`, `StreamPromptForTest` | SSE prompt stream via `agent.Client` |
 | `slack.go` | `SlackEvents` | Slack URL verification + event ack + async stub processor |
 
 `processSlackEvent` (unexported) logs events today. TODO: Slack user → `reemaUserId` mapping, ADK agent dispatch.
@@ -136,7 +167,7 @@ Thin HTTP layer over `internal/auth`.
 
 ```go
 GET  /healthz              → handlers.Healthz (no auth)
-POST /api/v1/prompt        → FirebaseAuth → handlers.Prompt
+POST /api/v1/prompt        → FirebaseAuth → PromptHandler
 POST /api/v1/slack/events  → SlackAuth    → handlers.SlackEvents
 ```
 
@@ -160,7 +191,7 @@ Cloud Run: inject env vars / Secret Manager; no `.env` file in the image.
 
 ## Not yet implemented
 
-- ADK/VDS agent orchestration (skeleton SSE chunks only)
 - Slack `slack_user_id` + `team_id` → `reemaUserId` mapping
 - Reema IAM / `CAN_*` permission checks
-- Request body size limits, rate limiting, structured audit logs
+- Forwarding Firebase JWT to Vertex (intentionally not done)
+- OAuth token exchange for user-scoped GCP API calls inside agent tools

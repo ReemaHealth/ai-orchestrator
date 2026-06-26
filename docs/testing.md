@@ -13,7 +13,8 @@ All tests are unit/integration style with `httptest` — no live Firebase or Sla
 | `internal/auth` | `firebase_test.go` | JWT verify with mock JWKS server |
 | `internal/auth` | `slack_test.go` | HMAC verify, replay window, missing headers |
 | `internal/middleware` | `auth_test.go` | Middleware → HTTP status mapping |
-| `internal/handlers` | `handlers_test.go` | SSE output, Slack handler branches |
+| `internal/agent` | `agent_test.go` | Skeleton client, Vertex stream parsing (httptest) |
+| `internal/handlers` | `handlers_test.go` | SSE via mock agent, prompt validation, Slack branches |
 
 ---
 
@@ -24,8 +25,8 @@ All tests are unit/integration style with `httptest` — no live Firebase or Sla
 #### `TestFirebaseVerifierVerifyToken`
 
 - Spins up a local `httptest` server returning a synthetic JWKS (RSA key).
-- Signs a JWT with matching `iss`, `aud`, `exp`, `firebase.sign_in_provider`, and `reemaUserId`.
-- Asserts `VerifyToken` returns the expected `Principal.ReemaUserID`.
+- Signs a JWT with matching `iss`, `aud`, `exp`, `firebase.sign_in_provider`, `reemaUserId`, and `email`.
+- Asserts `VerifyToken` returns the expected `Principal.ReemaUserID` and `Email`.
 
 Uses `NewFirebaseVerifierWithJWKS` to avoid calling Google in tests.
 
@@ -60,6 +61,24 @@ Wrong hex signature → `ErrVerificationFailed`.
 Timestamp 10 minutes in the past → `ErrVerificationFailed` (replay protection).
 
 Uses `auth.SignSlackRequest` helper to generate valid signatures in tests.
+
+---
+
+## `internal/agent` tests
+
+### `agent_test.go`
+
+#### `TestSkeletonClientStreamQuery`
+
+Emits five skeleton chunks when `AGENT_ENABLED=false`.
+
+#### `TestVertexClientStreamQuery`
+
+httptest SSE server; asserts text extracted from JSON `output` fields.
+
+#### `TestVertexClientStreamQueryErrorStatus`
+
+Non-2xx response returns error (handler maps to 502).
 
 ---
 
@@ -103,20 +122,19 @@ Uses a noop inner handler (auth-only tests, not full `SlackEvents`).
 
 #### `TestPromptStreamsSSE`
 
-Calls `StreamPromptForTest` with **zero chunk delay** (avoids 2.5s sleep in CI).
-
-Asserts:
-- `Content-Type: text/event-stream`
-- body contains `event: meta` and verified `reemaUserId`
-- body contains final skeleton chunk `5`
+Uses `StreamPromptForTest` with stub agent returning fixed chunks; asserts meta event and agent data lines.
 
 #### `TestPromptRequiresPrincipal`
 
-Calls `Prompt` without `auth.WithPrincipal` on context → **401**.
+`PromptHandler` without context principal → 401.
 
-#### `TestStreamPromptNoDelay`
+#### `TestPromptRequiresPromptBody`
 
-Smoke test for first SSE data line.
+Authenticated request with empty prompt → 400.
+
+#### `TestStreamPromptSkeletonAgent`
+
+Uses real `SkeletonClient` for chunk output smoke test.
 
 #### `TestSlackEventsURLVerification`
 
@@ -180,14 +198,37 @@ curl -N -X POST http://localhost:8080/api/v1/prompt \
 
 `-N` disables curl buffering so SSE chunks appear as they arrive.
 
-Token must include `reemaUserId` custom claim from your `beforeSignIn` hook.
+Token must include `reemaUserId` and `email` claims from your `beforeSignIn` hook.
 
 | Result | Meaning |
 |--------|---------|
 | 401 | missing / malformed Bearer header |
 | 403 | invalid, expired, or wrong-project JWT |
-| 400 | invalid JSON body (after auth passes) |
+| 400 | missing `prompt` |
+| 502 | Vertex agent call failed |
 | 200 + `text/event-stream` | success |
+
+#### Local dev without Vertex
+
+```bash
+AGENT_ENABLED=false go run .
+```
+
+Returns five skeleton chunks after the meta event.
+
+#### Local dev with Vertex
+
+```bash
+gcloud auth application-default login
+
+AGENT_ENABLED=true \
+GCP_PROJECT=your-project \
+GCP_LOCATION=us-central1 \
+REASONING_ENGINE_ID=your-engine-id \
+go run .
+```
+
+Cloud Run: grant the orchestrator service account `roles/aiplatform.user` (and reasoning engine invoke per your org setup).
 
 ---
 
@@ -198,6 +239,7 @@ Token must include `reemaUserId` custom claim from your `beforeSignIn` hook.
 | `SignSlackRequest` | `auth` | Build valid Slack HMAC for tests/scripts |
 | `VerifySlackRequestWithNow` | `auth` | Slack verify with injectable clock |
 | `NewFirebaseVerifierWithJWKS` | `auth` | Firebase verify with mock JWKS |
-| `StreamPromptForTest` | `handlers` | SSE stream with configurable delay |
+| `StreamPromptForTest` | `handlers` | SSE stream with injectable agent for tests |
+| `NewVertexClientWithHTTP` | `agent` | Vertex client against httptest server |
 
 These exist to keep crypto and handler logic testable without network calls.
