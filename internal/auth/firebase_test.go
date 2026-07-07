@@ -67,6 +67,9 @@ func TestFirebaseVerifierVerifyToken(t *testing.T) {
 	if principal.ReemaUserID != reemaUserID {
 		t.Fatalf("expected reema user id %s, got %s", reemaUserID, principal.ReemaUserID)
 	}
+	if principal.Email != "user@example.com" {
+		t.Fatalf("expected email user@example.com, got %s", principal.Email)
+	}
 }
 
 func TestExtractBearerToken(t *testing.T) {
@@ -98,6 +101,7 @@ func signTestFirebaseToken(t *testing.T, privateKey *rsa.PrivateKey, projectID s
 			"sign_in_provider": "google.com",
 		},
 		"reemaUserId": reemaUserID.String(),
+		"email":       "user@example.com",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

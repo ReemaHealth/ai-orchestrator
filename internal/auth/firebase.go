@@ -94,7 +94,12 @@ func (v *FirebaseVerifier) VerifyToken(_ context.Context, tokenString string) (P
 		return Principal{}, ErrVerificationFailed
 	}
 
-	return Principal{ReemaUserID: reemaUserID}, nil
+	email, err := emailFromClaims(claims, v.signInProvider)
+	if err != nil {
+		return Principal{}, ErrVerificationFailed
+	}
+
+	return Principal{ReemaUserID: reemaUserID, Email: email}, nil
 }
 
 func audienceContains(audiences jwt.ClaimStrings, expected string) bool {
@@ -113,6 +118,22 @@ func signInProviderMatches(claims jwt.MapClaims, expected string) bool {
 	}
 	provider, ok := firebaseClaim["sign_in_provider"].(string)
 	return ok && provider == expected
+}
+
+func emailFromClaims(claims jwt.MapClaims, signInProvider string) (string, error) {
+	if signInProvider == "google.com" {
+		raw, ok := claims["email"]
+		if !ok {
+			return "", ErrVerificationFailed
+		}
+		email, ok := raw.(string)
+		if !ok || strings.TrimSpace(email) == "" {
+			return "", ErrVerificationFailed
+		}
+		return strings.TrimSpace(email), nil
+	}
+
+	return "", nil
 }
 
 func reemaUserIDFromClaims(claims jwt.MapClaims) (uuid.UUID, error) {

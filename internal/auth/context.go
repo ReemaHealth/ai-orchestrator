@@ -9,6 +9,7 @@ import (
 // Principal holds verified caller identity after Firebase JWT authentication.
 type Principal struct {
 	ReemaUserID uuid.UUID
+	Email       string // verified JWT email claim; passed to Agent Engine as user_id
 }
 
 type principalKey struct{}
