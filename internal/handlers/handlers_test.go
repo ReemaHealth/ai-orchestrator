@@ -52,6 +52,10 @@ func (stubTokenProvider) ConsentRequired() bool { return true }
 
 func (stubTokenProvider) AuthorizePath() string { return "/api/v1/oauth/google/start" }
 
+func (stubTokenProvider) RevokeGrant(_ context.Context, _ auth.Principal) error {
+	return nil
+}
+
 func TestPromptStreamsSSE(t *testing.T) {
 	reemaUserID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	rec := httptest.NewRecorder()

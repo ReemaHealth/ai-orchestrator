@@ -44,6 +44,10 @@ func (useroauthNoopAdapter) ConsentRequired() bool { return false }
 
 func (useroauthNoopAdapter) AuthorizePath() string { return "" }
 
+func (useroauthNoopAdapter) RevokeGrant(_ context.Context, _ auth.Principal) error {
+	return nil
+}
+
 // ServeHTTP streams SSE output after Firebase auth (Principal on context).
 // Auth: Firebase JWT required (Authorization header). User-scoped GCP access for workspace
 // datastores is resolved server-side from stored refresh tokens when OAuth is configured,

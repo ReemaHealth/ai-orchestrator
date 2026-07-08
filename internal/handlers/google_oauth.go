@@ -19,12 +19,17 @@ type GoogleOAuthHandler struct {
 	cfg        config.Config
 	oauth      *oauth2.Config
 	store      store.RefreshTokenStore
+	tokens     useroauth.TokenProvider
 	stateCodec *useroauth.StateCodec
 }
 
 // NewGoogleOAuthHandler returns handlers for Google OAuth start, callback, and revoke.
 // Returns nil when Google OAuth client settings are not configured.
-func NewGoogleOAuthHandler(cfg config.Config, tokenStore store.RefreshTokenStore) (*GoogleOAuthHandler, error) {
+func NewGoogleOAuthHandler(
+	cfg config.Config,
+	tokenStore store.RefreshTokenStore,
+	tokens useroauth.TokenProvider,
+) (*GoogleOAuthHandler, error) {
 	if !cfg.GoogleOAuthConfigured() {
 		return nil, nil
 	}
@@ -38,6 +43,7 @@ func NewGoogleOAuthHandler(cfg config.Config, tokenStore store.RefreshTokenStore
 		cfg:        cfg,
 		oauth:      useroauth.OAuthConfig(cfg),
 		store:      tokenStore,
+		tokens:     tokens,
 		stateCodec: stateCodec,
 	}, nil
 }
@@ -137,8 +143,10 @@ func (h *GoogleOAuthHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.Delete(r.Context(), principal.ReemaUserID); err != nil {
+	if err := h.tokens.RevokeGrant(r.Context(), principal); err != nil {
 		log.Printf("oauth revoke: %v", err)
+		http.Error(w, "oauth revoke failed", http.StatusBadGateway)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)

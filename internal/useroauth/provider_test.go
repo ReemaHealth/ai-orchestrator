@@ -95,6 +95,35 @@ func TestStateCodecRoundTrip(t *testing.T) {
 	}
 }
 
+func TestProviderRevokeGrantClearsStoredGrant(t *testing.T) {
+	cfg := oauthTestConfig()
+	tokenStore := store.NewMemoryStore()
+	principal := testPrincipal()
+
+	_ = tokenStore.Save(context.Background(), principal.ReemaUserID, principal.Email, &oauth2.Token{
+		RefreshToken: "refresh-token",
+		AccessToken:  "access-token",
+		Expiry:       time.Now().Add(time.Hour),
+	})
+
+	provider, err := useroauth.NewProvider(cfg, tokenStore)
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	if err := provider.RevokeGrant(context.Background(), principal); err != nil {
+		t.Fatalf("revoke grant: %v", err)
+	}
+
+	_, err = provider.AccessToken(context.Background(), principal, "")
+	if err == nil {
+		t.Fatal("expected ErrConsentRequired after revoke")
+	}
+	if err != useroauth.ErrConsentRequired {
+		t.Fatalf("err = %v, want ErrConsentRequired", err)
+	}
+}
+
 func TestMemoryStoreSaveLoadDelete(t *testing.T) {
 	mem := store.NewMemoryStore()
 	userID := uuid.New()

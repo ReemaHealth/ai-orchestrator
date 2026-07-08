@@ -43,7 +43,7 @@ func main() {
 		log.Fatalf("user oauth provider: %v", err)
 	}
 
-	oauthHandler, err := handlers.NewGoogleOAuthHandler(cfg, tokenStore)
+	oauthHandler, err := handlers.NewGoogleOAuthHandler(cfg, tokenStore, tokenProvider)
 	if err != nil {
 		log.Fatalf("google oauth handler: %v", err)
 	}
