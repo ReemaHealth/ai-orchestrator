@@ -94,6 +94,12 @@ func (c *VertexClient) StreamQuery(ctx context.Context, in StreamQueryInput, emi
 		}
 	}
 
+	if in.OnSessionReady != nil && sessionID != "" {
+		if err := in.OnSessionReady(sessionID); err != nil {
+			return err
+		}
+	}
+
 	// ADK async_stream_query accepts user_id, session_id, message, and optional state_delta.
 	input := map[string]any{
 		"message": in.Prompt,
