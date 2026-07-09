@@ -56,6 +56,10 @@ func (stubTokenProvider) RevokeGrant(_ context.Context, _ auth.Principal) error 
 	return nil
 }
 
+func (stubTokenProvider) HasStoredGrant(_ context.Context, _ auth.Principal) bool {
+	return true
+}
+
 func TestPromptStreamsSSE(t *testing.T) {
 	reemaUserID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	rec := httptest.NewRecorder()
@@ -64,7 +68,7 @@ func TestPromptStreamsSSE(t *testing.T) {
 		Email:       "user@example.com",
 	}
 	stub := &stubAgent{chunks: []string{"chunk one", "chunk two"}}
-	err := handlers.StreamPromptForTest(rec, principal, "hello", "oauth-token", stub)
+	err := handlers.StreamPromptForTest(rec, principal, "hello", "", "oauth-token", stub)
 	if err != nil {
 		t.Fatalf("stream prompt: %v", err)
 	}
@@ -212,7 +216,7 @@ func TestPromptUsesProviderToken(t *testing.T) {
 func TestStreamPromptSkeletonAgent(t *testing.T) {
 	rec := httptest.NewRecorder()
 	principal := auth.Principal{ReemaUserID: uuid.New(), Email: "user@example.com"}
-	err := handlers.StreamPromptForTest(rec, principal, "hi", "", agent.NewSkeletonClient())
+	err := handlers.StreamPromptForTest(rec, principal, "hi", "", "", agent.NewSkeletonClient())
 	if err != nil {
 		t.Fatalf("stream prompt: %v", err)
 	}

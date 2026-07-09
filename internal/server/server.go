@@ -44,9 +44,11 @@ func (s *Server) Handler() http.Handler {
 	firebaseAuth := middleware.FirebaseAuth(middleware.NewFirebaseVerifierAdapter(s.firebase))
 	slackAuth := middleware.SlackAuth(s.cfg.SlackSigningSecret)
 	promptHandler := handlers.NewPromptHandler(s.agentClient, s.tokenProvider)
+	oauthStatusHandler := handlers.NewOAuthStatusHandler(s.tokenProvider)
 
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.Handle("POST /api/v1/prompt", firebaseAuth(promptHandler))
+	mux.Handle("GET /api/v1/oauth/google/status", firebaseAuth(oauthStatusHandler))
 	mux.Handle("POST /api/v1/slack/events", slackAuth(http.HandlerFunc(handlers.SlackEvents)))
 
 	if s.oauthHandler != nil {

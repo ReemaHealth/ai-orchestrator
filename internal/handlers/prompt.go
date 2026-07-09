@@ -48,6 +48,10 @@ func (useroauthNoopAdapter) RevokeGrant(_ context.Context, _ auth.Principal) err
 	return nil
 }
 
+func (useroauthNoopAdapter) HasStoredGrant(_ context.Context, _ auth.Principal) bool {
+	return true
+}
+
 // ServeHTTP streams SSE output after Firebase auth (Principal on context).
 // Auth: Firebase JWT required (Authorization header). User-scoped GCP access for workspace
 // datastores is resolved server-side from stored refresh tokens when OAuth is configured,
@@ -95,7 +99,7 @@ func (h *PromptHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := streamPrompt(r.Context(), w, h.Agent, principal, req.Prompt, oauthToken); err != nil {
+	if err := streamPrompt(r.Context(), w, h.Agent, principal, req.Prompt, req.SessionID, oauthToken); err != nil {
 		log.Printf("prompt agent error (user=%s prompt=%q): %v", principal.Email, req.Prompt, err)
 		if headersSent(w) {
 			writeSSEError(w, sanitizeAgentError(err))
@@ -107,15 +111,16 @@ func (h *PromptHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type promptRequest struct {
 	Prompt         string `json:"prompt"`
+	SessionID      string `json:"sessionId,omitempty"`
 	GCPAccessToken string `json:"gcpAccessToken,omitempty"`
 }
 
 // StreamPromptForTest streams SSE via a mock agent for handler tests.
-func StreamPromptForTest(w http.ResponseWriter, principal auth.Principal, prompt, oauthToken string, client agent.Client) error {
-	return streamPrompt(context.Background(), w, client, principal, prompt, oauthToken)
+func StreamPromptForTest(w http.ResponseWriter, principal auth.Principal, prompt, sessionID, oauthToken string, client agent.Client) error {
+	return streamPrompt(context.Background(), w, client, principal, prompt, sessionID, oauthToken)
 }
 
-func streamPrompt(ctx context.Context, w http.ResponseWriter, client agent.Client, principal auth.Principal, prompt, oauthToken string) error {
+func streamPrompt(ctx context.Context, w http.ResponseWriter, client agent.Client, principal auth.Principal, prompt, sessionID, oauthToken string) error {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -138,7 +143,19 @@ func streamPrompt(ctx context.Context, w http.ResponseWriter, client agent.Clien
 		Prompt:         prompt,
 		UserID:         principal.Email,
 		ReemaUserID:    principal.ReemaUserID,
+		SessionID:      strings.TrimSpace(sessionID),
 		UserOAuthToken: oauthToken,
+		OnSessionReady: func(resolvedSessionID string) error {
+			if strings.TrimSpace(resolvedSessionID) == "" {
+				return nil
+			}
+			payload, _ := json.Marshal(map[string]string{
+				"sessionId": resolvedSessionID,
+			})
+			_, _ = fmt.Fprintf(w, "event: meta\ndata: %s\n\n", payload)
+			flusher.Flush()
+			return nil
+		},
 	}, func(chunk string) error {
 		if strings.TrimSpace(chunk) == "" {
 			return nil
