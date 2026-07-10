@@ -38,6 +38,10 @@ type TokenProvider interface {
 	ConsentRequired() bool
 	// AuthorizePath returns the relative path to start Google OAuth consent.
 	AuthorizePath() string
+	// RevokeGrant removes stored grants and invalidates cached access tokens.
+	RevokeGrant(ctx context.Context, principal auth.Principal) error
+	// HasStoredGrant reports whether the user has completed OAuth consent.
+	HasStoredGrant(ctx context.Context, principal auth.Principal) bool
 }
 
 // Provider resolves tokens via stored refresh grants with optional client override.
@@ -142,6 +146,26 @@ func (p *Provider) AccessToken(ctx context.Context, principal auth.Principal, cl
 	return tok.AccessToken, nil
 }
 
+// RevokeGrant implements TokenProvider.
+func (p *Provider) RevokeGrant(ctx context.Context, principal auth.Principal) error {
+	p.cache.delete(principal.ReemaUserID)
+
+	stored, err := p.store.Load(ctx, principal.ReemaUserID)
+	if err != nil {
+		return nil
+	}
+
+	if token := strings.TrimSpace(stored.RefreshToken); token != "" {
+		if err := revokeGoogleOAuthToken(ctx, token); err != nil {
+			return fmt.Errorf("revoke google oauth token: %w", err)
+		}
+	} else if token := strings.TrimSpace(stored.AccessToken); token != "" {
+		_ = revokeGoogleOAuthToken(ctx, token)
+	}
+
+	return p.store.Delete(ctx, principal.ReemaUserID)
+}
+
 // ConsentRequired implements TokenProvider.
 func (p *Provider) ConsentRequired() bool {
 	return p.mode == ModeAuto || p.mode == ModeRequired
@@ -150,6 +174,21 @@ func (p *Provider) ConsentRequired() bool {
 // AuthorizePath implements TokenProvider.
 func (p *Provider) AuthorizePath() string {
 	return "/api/v1/oauth/google/start"
+}
+
+// HasStoredGrant implements TokenProvider.
+func (p *Provider) HasStoredGrant(ctx context.Context, principal auth.Principal) bool {
+	if !p.ConsentRequired() {
+		return true
+	}
+	if err := p.validateEmail(principal.Email); err != nil {
+		return false
+	}
+	if _, ok := p.cache.get(principal.ReemaUserID); ok {
+		return true
+	}
+	_, err := p.store.Load(ctx, principal.ReemaUserID)
+	return err == nil
 }
 
 func (p *Provider) validateEmail(email string) error {
@@ -195,6 +234,12 @@ func (c *tokenCache) set(userID interface{ String() string }, token string, expi
 	}
 }
 
+func (c *tokenCache) delete(userID interface{ String() string }) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.byUser, userID.String())
+}
+
 type noopProvider struct{}
 
 func (p *noopProvider) AccessToken(_ context.Context, _ auth.Principal, clientOverride string) (string, error) {
@@ -204,6 +249,14 @@ func (p *noopProvider) AccessToken(_ context.Context, _ auth.Principal, clientOv
 func (p *noopProvider) ConsentRequired() bool { return false }
 
 func (p *noopProvider) AuthorizePath() string { return "" }
+
+func (p *noopProvider) RevokeGrant(_ context.Context, _ auth.Principal) error {
+	return nil
+}
+
+func (p *noopProvider) HasStoredGrant(_ context.Context, _ auth.Principal) bool {
+	return true
+}
 
 type clientOnlyProvider struct {
 	mode Mode
@@ -220,3 +273,11 @@ func (p *clientOnlyProvider) AccessToken(_ context.Context, _ auth.Principal, cl
 func (p *clientOnlyProvider) ConsentRequired() bool { return true }
 
 func (p *clientOnlyProvider) AuthorizePath() string { return "/api/v1/oauth/google/start" }
+
+func (p *clientOnlyProvider) RevokeGrant(_ context.Context, _ auth.Principal) error {
+	return nil
+}
+
+func (p *clientOnlyProvider) HasStoredGrant(_ context.Context, _ auth.Principal) bool {
+	return false
+}

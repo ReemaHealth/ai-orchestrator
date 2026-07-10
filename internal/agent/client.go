@@ -15,6 +15,8 @@ type StreamQueryInput struct {
 	ReemaUserID    uuid.UUID
 	SessionID      string // optional; empty generates a new session per request
 	UserOAuthToken string // GE OAuth token (Drive scopes); stored in ADK session state for datastore ACL
+	// OnSessionReady is invoked once the ADK session id is known (before streaming chunks).
+	OnSessionReady func(sessionID string) error
 }
 
 // Client streams agent output chunks to the emit callback.

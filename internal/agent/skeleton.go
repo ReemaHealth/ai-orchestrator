@@ -14,7 +14,16 @@ func NewSkeletonClient() *SkeletonClient {
 }
 
 // StreamQuery implements Client with five placeholder chunks.
-func (c *SkeletonClient) StreamQuery(_ context.Context, _ StreamQueryInput, emit func(chunk string) error) error {
+func (c *SkeletonClient) StreamQuery(_ context.Context, in StreamQueryInput, emit func(chunk string) error) error {
+	sessionID := in.SessionID
+	if sessionID == "" {
+		sessionID = "skeleton-session"
+	}
+	if in.OnSessionReady != nil {
+		if err := in.OnSessionReady(sessionID); err != nil {
+			return err
+		}
+	}
 	for i := 1; i <= 5; i++ {
 		if err := emit(fmt.Sprintf("Skeleton token chunk %d", i)); err != nil {
 			return err
