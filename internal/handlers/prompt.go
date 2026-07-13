@@ -157,7 +157,8 @@ func streamPrompt(ctx context.Context, w http.ResponseWriter, client agent.Clien
 			return nil
 		},
 	}, func(chunk string) error {
-		if strings.TrimSpace(chunk) == "" {
+		// Preserve whitespace-only chunks (e.g. "\n") so markdown structure survives.
+		if chunk == "" {
 			return nil
 		}
 		writeSSEData(w, chunk)
@@ -179,16 +180,14 @@ func writeSSEDone(w http.ResponseWriter) {
 }
 
 // writeSSEData writes one SSE message, prefixing each line with "data:" per the SSE spec.
-// Without this, embedded newlines break clients (e.g. Postman shows "(empty)" for each line).
+// Newlines in the chunk become multiple data lines; clients must join them with "\n".
+// Empty lines are preserved so markdown headings/lists keep their structure.
 func writeSSEData(w http.ResponseWriter, chunk string) {
-	chunk = strings.TrimSpace(strings.ReplaceAll(chunk, "\r\n", "\n"))
+	chunk = strings.ReplaceAll(chunk, "\r\n", "\n")
 	if chunk == "" {
 		return
 	}
 	for _, line := range strings.Split(chunk, "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
 		_, _ = fmt.Fprintf(w, "data: %s\n", line)
 	}
 	_, _ = fmt.Fprint(w, "\n")
